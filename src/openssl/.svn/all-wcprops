@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/svn/ddjs/!svn/ver/3141/pc/server/trunk/ddvpn_nettun/src/openssl
+END
+COpenssl.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 77
+/svn/ddjs/!svn/ver/3141/pc/server/trunk/ddvpn_nettun/src/openssl/COpenssl.cpp
+END
+COpenssl.h
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/ddjs/!svn/ver/2641/pc/server/trunk/ddvpn_nettun/src/openssl/COpenssl.h
+END
+rand_key.h
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/ddjs/!svn/ver/2641/pc/server/trunk/ddvpn_nettun/src/openssl/rand_key.h
+END

@@ -1,0 +1,18 @@
+/*
+ * CThreadBase.h
+ * created on: Nov 7, 2017
+ * author: 	   leiq
+ * email: 	   lleiq@foxmail.com
+ */
+
+#ifndef SRC_THREAD_CTHREADBASE_H_
+#define SRC_THREAD_CTHREADBASE_H_
+#include "CDefine.h"
+#include "CInclude.h"
+class CThreadBase {
+public:
+	static
+	bool	onStartThread(void *param,void *(*pRun)(void *));
+};
+
+#endif /* SRC_THREAD_CTHREADBASE_H_ */

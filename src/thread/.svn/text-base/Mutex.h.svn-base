@@ -1,0 +1,118 @@
+#ifndef CMUTEX_H
+#define CMUTEX_H
+
+#include <pthread.h>
+
+class CMutex   
+{   
+public:   
+	CMutex (bool be_initial_owner = false)   
+	{   
+#ifdef WIN32
+		mutex_ = CreateMutex(NULL, be_initial_owner, NULL);  
+#else
+		pthread_mutex_init(&mtx,NULL);
+#endif
+	}   
+	~CMutex (void)   
+	{  
+#ifdef WIN32
+		CloseHandle (mutex_);
+#else
+		pthread_mutex_destroy( &mtx );
+#endif
+	}   
+public:   
+	int acquire ()   
+	{   
+#ifdef WIN32
+		DWORD  ret  = WaitForSingleObject (mutex_, INFINITE);  
+		return ret == WAIT_OBJECT_0 ? 0 : -1;  
+#else
+		pthread_mutex_lock( &mtx );
+		return 1;
+#endif
+	}   
+	int release ()   
+	{   
+#ifdef WIN32
+		BOOL bret = ReleaseMutex (mutex_);   
+		return bret ? 0 : -1;
+#else
+		pthread_mutex_unlock( &mtx );
+		return 1;
+#endif
+	}   
+
+	void Lock()
+	{
+		pthread_mutex_lock( &mtx );
+	}
+
+	void Unlock()
+	{
+		pthread_mutex_unlock( &mtx );
+	}
+
+protected:
+
+#ifdef WIN32
+	HANDLE mutex_;  
+#else
+	pthread_mutex_t mtx;
+#endif
+};  
+
+class NullMutex
+{
+public:   
+	int acquire ()   
+	{   
+		return 0;
+	}   
+
+	int release ()   
+	{   
+		return 0;
+	}   
+};
+
+template<class T>
+class Lock
+{
+private:
+	Lock( const Lock& );
+	Lock& operator=( const Lock& );
+
+public:
+	Lock( T& _t ):_lockobj(_t)
+	{
+		_lockobj.acquire();
+	}
+
+	~Lock()
+	{
+		_lockobj.release();
+	}
+
+private:
+	T& _lockobj;
+};
+
+typedef Lock<CMutex>    MutexLock;
+typedef Lock<NullMutex> NullLock;
+
+struct MutexPolicy
+{
+	typedef MutexLock LockWrapper;
+	typedef CMutex    LockType;
+};
+
+struct NullPolicy
+{
+	typedef NullLock   LockWrapper;
+	typedef NullMutex  LockType;
+};
+
+
+#endif

@@ -1,0 +1,133 @@
+#ifndef _THREAD_CONDITION_VARIABLE_INCLUDE_
+#define _THREAD_CONDITION_VARIABLE_INCLUDE_
+#include <pthread.h>
+#include <stdexcept>
+#include <sys/time.h>
+#include <errno.h>
+#include "..//time/time_function.h"
+
+namespace thread_tool
+{
+	template<typename MutexType>
+	struct lock_on_exit
+	{
+		MutexType * _m;
+		
+		lock_on_exit()
+			: _m(NULL)
+		{
+		}
+
+		~lock_on_exit()
+		{
+			if (_m)
+				_m->Lock();
+		}
+
+		void activate(MutexType& m)
+		{
+			m.Unlock();
+			_m = &m;
+		}
+	};
+
+	class condition_variable
+	{
+	public:
+
+		struct internal_lock_guard
+		{
+			internal_lock_guard(pthread_mutex_t& m)
+				: _m(m)
+			{
+				pthread_mutex_lock(&_m);
+			}
+
+			~internal_lock_guard()
+			{
+				pthread_mutex_unlock(&_m);
+			}
+
+			pthread_mutex_t& _m;
+		};
+		
+		condition_variable();
+		~condition_variable();
+
+		template<typename lock_type>
+		void Wait(lock_type& m)
+		{
+			int ret = 0;
+			{
+				lock_on_exit<lock_type> guard;
+				internal_lock_guard internal_guard(_internal_mutex);
+				guard.activate(m);
+				ret = pthread_cond_wait(&_cond, &_internal_mutex);
+			}
+			if (ret)
+				throw std::runtime_error("condition wait error");
+		}
+
+		template<typename lock_type, typename predicate_type>
+		void Wait(lock_type& m, predicate_type pred)
+		{
+			while (!pred()) wait(m);
+		}
+
+		template<typename lock_type>
+		bool TimedWait(lock_type& m, unsigned int msec)
+		{
+			timespec ts = {0, 0};
+			util::GetUntilTime(ts, msec);
+
+			return TimedWait(m, &ts);
+		}
+
+		template<typename lock_type, typename predicate_type>
+		bool TimedWait(lock_type& m, predicate_type pred, unsigned int msec)
+		{
+			timespec ts = {0, 0};
+			util::GetUntilTime(ts, msec);
+
+			while (!pred())
+			{
+				if (!TimedWait(m, &ts))
+					return pred();
+			}
+			return true;
+		}
+
+		template<typename lock_type>
+		bool TimedWait(lock_type& m, const timespec * abstime)
+		{
+			int ret = 0;
+			{
+				lock_on_exit<lock_type> guard;
+				internal_lock_guard internal_guard(_internal_mutex);
+				guard.activate(m);
+				ret = pthread_cond_timedwait(&_cond, &_internal_mutex, abstime);
+			}
+			if (ret == ETIMEDOUT)
+				return false;
+
+			if (ret)
+				throw std::runtime_error("condition time wait failed");
+
+			return true;
+		}
+
+		void NotifyOne();
+
+		void NotifyAll();
+
+	private:
+		condition_variable(const condition_variable&);
+		condition_variable& operator=(const condition_variable&);
+
+		pthread_mutex_t _internal_mutex;
+		pthread_cond_t _cond;
+	};
+}
+
+#endif //_THREAD_CONDITION_VARIABLE_INCLUDE_
+
