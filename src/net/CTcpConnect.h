@@ -26,6 +26,7 @@ public:
 	bool onInit(CNetEvent* pNet);
 	bool onIsConnected() { return _bConnect; }
 	bool onDisconnectd();
+	uint32_t getChannelId() { return ++_uiChannelId;}
 
 	bool onChangeState(ESTATE state);
 	bool onIsLogined() { return STATE_LOGINED == _eState;}
@@ -64,10 +65,12 @@ public:
 	bool onResponseAccess(SOCKADDR_IN& localaddr, uint32_t private_addr);
 
 	//////////////////////////////////////////////////////////////
-	std::vector<uint32_t> onGetInChannels() { return _vInChannels; }
-	std::vector<uint32_t> onGetOutChannels() { return _vOutChannels; }
-	void onAddInChannel(uint32_t id) { _vInChannels.push_back(id);}
-	void onAddOutChannel(uint32_t id) { _vOutChannels.push_back(id);}
+	bool onCreateUdpChannel(CTcpConnect* pOutConn);
+	bool onAddOutUdpChannel(CUdpChannel* pChannel);
+//	std::vector<uint32_t> onGetInChannels() { return _vInChannels; }
+//	std::vector<uint32_t> onGetOutChannels() { return _vOutChannels; }
+//	void onAddInChannel(uint32_t id) { _vInChannels.push_back(id);}
+//	void onAddOutChannel(uint32_t id) { _vOutChannels.push_back(id);}
 
 public:
 	SPackageHeader 	_stHeader;
@@ -77,6 +80,7 @@ private:
 	bool		_bConnect;
 	uint8_t		_cRes;
 	uint32_t	_uiId;
+	uint32_t	_uiChannelId;
 
 	uint32_t	_uiPrivaAddr;
 	CSTD_STR	_szGuid;
@@ -90,8 +94,11 @@ private:
 	CEpoller*   _pReactor;
 	CAccepter*	_pAccepter;
 
-	std::vector<uint32_t> _vInChannels;
-	std::vector<uint32_t> _vOutChannels;
+	//std::vector<uint32_t> _vInChannels;
+	//std::vector<uint32_t> _vOutChannels;
+
+	std::map<uint32_t, CUdpChannel*> _mapInChannels;
+	std::map<uint32_t, CUdpChannel*> _mapOutChannels;
 };
 
 #endif

@@ -52,15 +52,17 @@ bool CTcpConnect::onDisconnectd()
 	}
 
 	CSocket::onClose(_csClientCtrl);
-	for (size_t i = 0; i < _vInChannels.size(); i++)
+	std::map<uint32_t, CUdpChannel*>::iterator mapit = _mapInChannels.begin();
+	for (; mapit != _mapInChannels.end(); ++mapit)
 	{
-		_pAccepter->onShutdownChannel(_vInChannels[i], 0);
+		mapit->second->onShutdonw(0);
 	}
 
-	for (size_t i = 0; i < _vOutChannels.size(); i++)
+	for (mapit = _mapOutChannels.begin(); mapit != _mapOutChannels.end(); ++mapit)
 	{
-		_pAccepter->onShutdownChannel(_vOutChannels[i], 1);
+		mapit->second->onShutdonw(1);
 	}
+
 	return true;
 }
 
@@ -422,5 +424,56 @@ bool CTcpConnect::onResponseAccess(SOCKADDR_IN& localaddr, uint32_t private_addr
 	_stHeader.ucFunc = CFuncCode::FUNC_ACCESS_ACCELERATE;
 	onPackSock5Respon(cbuff);
 
+	return true;
+}
+
+bool CTcpConnect::onCreateUdpChannel(CTcpConnect* pDstConn)
+{
+	SOCKADDR_IN udp_addr;
+	bzero(&udp_addr, sizeof(SOCKADDR_IN));
+
+	CUdpChannel* pChannel = new CUdpChannel(getChannelId(), udp_addr
+			, _csClientCtrl._remoteSockAddr
+			, pDstConn->_csClientCtrl._remoteSockAddr);
+
+	if (pChannel->onInit())
+	{
+		udp_addr = pChannel->onGetLocalAddr();
+		if(pDstConn->onResponseAccess(udp_addr, onGetPrivateAddr()))
+		{
+			CNetEvent* pNewNet = new CNetEvent(pChannel->_csSocket, pChannel, CAccepter::onUdpEventCallback);
+			_pReactor->add(pChannel->_csSocket._nFd, pNewNet);
+
+			_mapInChannels.insert(std::make_pair(pChannel->onGetId(), pChannel));
+			pDstConn->onAddOutUdpChannel(pChannel);
+
+			onChangeState(CTcpConnect::STATE_ACCELERATING);
+			onSetErr(CErrorCode::ERROR_SOCKET5_SUCCESS);
+			return true;
+		}
+
+		onSetErr(CErrorCode::ERROR_SOCKET5_COONNECT_NEXE_ERROR);
+		DEBUGINFO("response out client %u access acceleration failed.", pDstConn->onGetId());
+	}
+
+	if (CErrorCode::ERROR_SOCKET5_SUCCESS != onGetErr())
+	{
+		delete pChannel;
+		return false;
+	}
+
+	return true;
+}
+
+
+bool CTcpConnect::onAddOutUdpChannel(CUdpChannel* pChannel)
+{
+	std::map<uint32_t, CUdpChannel*>::iterator it = _mapOutChannels.find(pChannel->onGetId());
+	if (it != _mapOutChannels.end())
+	{
+		DEBUGINFO("repeate to add udp channel %u in tcp: %u.", pChannel->onGetId(), onGetId());
+		return false;
+	}
+	_mapOutChannels.insert(std::make_pair(pChannel->onGetId(), pChannel));
 	return true;
 }

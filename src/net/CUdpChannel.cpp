@@ -2,7 +2,7 @@
 #include "CTcpConnect.h"
 #include "CSocket.h"
 
-CUdpChannel::CUdpChannel(uint32_t id, SOCKADDR_IN& localaddr, SOCKADDR_IN& in, SOCKADDR_IN& out)
+CUdpChannel::CUdpChannel(uint32_t id, SOCKADDR_IN& localaddr, CTcpConnect* pIn, CTcpConnect* pOut)
 : _eState(STATE_INITIALIZE)
 , _bOpenedIn(false)
 , _bOpenedOut(false)
@@ -12,6 +12,8 @@ CUdpChannel::CUdpChannel(uint32_t id, SOCKADDR_IN& localaddr, SOCKADDR_IN& in, S
 , _uiReadSize(0)
 , _szReadBuff(NULL)
 , _szSendBuff(NULL)
+, _pInConn(pIn)
+, _pOutConn(pOut)
 {
 	bzero(&_csSocket, sizeof(CSocketData));
 	_csSocket._localSockaddr.sin_addr = localaddr.sin_addr;
@@ -19,8 +21,8 @@ CUdpChannel::CUdpChannel(uint32_t id, SOCKADDR_IN& localaddr, SOCKADDR_IN& in, S
 	_uiReadBuffSize = 1500;
 	_uiSendBuffSize = 1500;
 
-	_inSockAddr.sin_addr = in.sin_addr;
-	_outSockAddr.sin_addr = out.sin_addr;
+	_inSockAddr.sin_addr = pIn->_csClientCtrl._remoteSockAddr.sin_addr;
+	_outSockAddr.sin_addr = pOut->_csClientCtrl._remoteSockAddr.sin_addr;
 
 	gCCommon->onSockAddr2String(_inSockAddr,_szInAddr);
 	gCCommon->onSockAddr2String(_outSockAddr,_szOutAddr);
@@ -73,19 +75,21 @@ bool CUdpChannel::onShutdonw(uint8_t dire)
 	case DIRECT_IN: {
 		_bOpenedIn = false;
 		_eState = _bOpenedOut ? STATE_HALFOPENED : STATE_CLOSED;
-		DEBUGINFO("[UDP] channel%04u shutdown in end.", _uiId);
+		DEBUGINFO("[UDP] channel[%04u] shutdown in end.", _uiId);
+		_pOutConn->onOutChannelClose();
 		onClose();
 	}
 	break;
 	case DIRECT_OUT: {
 		_bOpenedOut = false;
 		_eState = _bOpenedIn ? STATE_HALFOPENED : STATE_CLOSED;
-		DEBUGINFO("[UDP] channel%04u shutdown out end.", _uiId);
+		DEBUGINFO("[UDP] channel[%04u] shutdown out end.", _uiId);
+		_pInConn->onInChannelClose();
 		onClose();
 	}
 	break;
 	default:
-		DEBUGINFO("[UDP] channel%04u shutdown failed.", _uiId);
+		DEBUGINFO("[UDP] channel[%04u] shutdown failed.", _uiId);
 		return false;
 	}
 	return true;

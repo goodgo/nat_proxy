@@ -20,11 +20,13 @@ public:
 	}EDIRECT;
 
 public:
-	CUdpChannel(uint32_t id, SOCKADDR_IN& localaddr, SOCKADDR_IN& in, SOCKADDR_IN& out);
+	CUdpChannel(uint32_t id, SOCKADDR_IN& localaddr, CTcpConnect* pIn, CTcpConnect* pOut);
 	~CUdpChannel();
 	bool onInit();
 	bool onClose();
-	bool onShutdonw(uint8_t dire);
+	bool onIsClosed() { return _eState == ESTATE::STATE_CLOSED; }
+ 	bool onShutdonw(uint8_t dire);
+ 	SOCKADDR_IN onGetLocalAddr() { return _csSocket._localSockaddr;}
 
 	bool onForward();
 	uint32_t onGetId() { return _uiId; }
@@ -53,6 +55,9 @@ public:
 	SOCKADDR_IN	_outSockAddr;
 	CSTD_STR	_szInAddr;
 	CSTD_STR	_szOutAddr;
+
+	CTcpConnect* _pInConn;
+	CTcpConnect* _pOutConn;
 };
 
 #endif

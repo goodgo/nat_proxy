@@ -161,15 +161,7 @@ bool CAccepter::delTcpNetEvent(CNetEvent* pNet)
 		_mapClients.erase(mapit);
 	}
 
-	std::vector<uint32_t> channels = pConn->onGetInChannels();
-	for (size_t i = 0; i < channels.size(); i++)
-	{
-		std::map<uint32_t, CUdpChannel*>::iterator mapit2 = _mapChannels.find(channels[i]);
-		if (mapit2 != _mapChannels.end())
-		{
-			_mapChannels.erase(mapit2);
-		}
-	}
+
 	DEBUGINFO("client disconnect. ID: %u | GUID: %s | IP: %s", pConn->onGetId(), pConn->onGetGuid().c_str(), pConn->onGetAddr().c_str());
 
 	delete pConn;
@@ -452,10 +444,6 @@ bool CAccepter::onAccelerate(CNetEvent* pNet, CAccelationReqPackage& pkg)
 	CTcpConnect* pInConn = (CTcpConnect*)pNet->_ptr;
 	CTcpConnect* pOutConn = onGetClient(pkg.uiDstId);
 
-	SOCKADDR_IN udp_addr;
-	bzero(&udp_addr, sizeof(SOCKADDR_IN));
-	udp_addr.sin_addr.s_addr = _csSockServer._localSockaddr.sin_addr.s_addr;
-
 	if (NULL == pOutConn || !pInConn->onIsLogined() || pInConn == pOutConn)
 	{
 		pInConn->onSetErr(CErrorCode::ERROR_SYSTEM_BIND_ERROR);
@@ -464,35 +452,7 @@ bool CAccepter::onAccelerate(CNetEvent* pNet, CAccelationReqPackage& pkg)
 	}
 	else
 	{
-		CUdpChannel* pChannel = new CUdpChannel(getChannelId()
-				, udp_addr
-				, pInConn->_csClientCtrl._remoteSockAddr
-				, pOutConn->_csClientCtrl._remoteSockAddr);
-
-		if (pChannel->onInit())
-		{
-			udp_addr = pChannel->_csSocket._localSockaddr;
-			if(pOutConn->onResponseAccess(udp_addr, pInConn->onGetPrivateAddr()))
-			{
-				CNetEvent* pNewNet = new CNetEvent(pChannel->_csSocket, pChannel, CAccepter::onUdpEventCallback);
-				_pReactor->add(pChannel->_csSocket._nFd, pNewNet);
-
-				_mapChannels.insert(std::make_pair(pChannel->onGetId(), pChannel));
-				pInConn->onAddInChannel(pChannel->onGetId());
-				pOutConn->onAddOutChannel(pChannel->onGetId());
-
-				pInConn->onChangeState(CTcpConnect::STATE_ACCELERATING);
-				pInConn->onSetErr(CErrorCode::ERROR_SOCKET5_SUCCESS);
-			}
-			else
-			{
-				pInConn->onSetErr(CErrorCode::ERROR_SOCKET5_COONNECT_NEXE_ERROR);
-				DEBUGINFO("response out client %u access acceleration failed.", pOutConn->onGetId());
-			}
-		}
-
-		if (CErrorCode::ERROR_SOCKET5_SUCCESS != pInConn->onGetErr())
-			delete pChannel;
+		pInConn->onCreateUdpChannel(pOutConn);
 	}
 
 
