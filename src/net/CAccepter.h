@@ -29,13 +29,17 @@ public:
 
 	uint32_t onGetConnNum() {return _uiConnNum;}
 	void onIncrConnNum() { _uiConnNum++; }
+	uint32_t onGetActiveNum() { return _mapClients.size(); }
 
-	bool onShutdownChannel(uint32_t id, char direct);
+	bool onShutdownChannel(uint32_t id, uint8_t direct);
+
+	static bool onAcceptCallback(void* obj, struct epoll_event& ev);
+	static bool onTcpEventCallback(void* obj, struct epoll_event& ev);
+	static bool onUdpEventCallback(void* obj, struct epoll_event& ev);
 
 private:
 	bool initServer();
 	bool delTcpNetEvent(CNetEvent* pConn);
-	bool delUdpNetEvent(CNetEvent* pConn);
 
 	uint32_t getSelfId() { return _uiId; }
 	uint32_t getClientId() { return ++_uiClientId; }
@@ -44,10 +48,6 @@ private:
 	bool onDataOut(struct epoll_event& pev);
 	bool onGetAllClientInfo(uint32_t id, std::vector<SGetConsolesRespPackage>& vecConsoles);
 	CTcpConnect* onGetClient(uint32_t clientid);
-
-	static bool onAcceptCallback(void* obj, struct epoll_event& ev);
-	static bool onTcpEventCallback(void* obj, struct epoll_event& ev);
-	static bool onUdpEventCallback(void* obj, struct epoll_event& ev);
 
 	bool onLogin(CNetEvent* pNet, CLoginReqPackage& pkg);
 	bool onGetConsoles(CNetEvent* pNet, CGetConsolesReqPackage& pkg);
@@ -66,7 +66,6 @@ private:
 
 	std::set<CSTD_STR> _setGuids;
 	std::map<uint32_t, CTcpConnect*> _mapClients;
-	std::map<uint32_t, CUdpChannel*> _mapChannels;
 };
 
 #endif

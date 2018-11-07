@@ -3,6 +3,9 @@
 
 #include "CInclude.h"
 
+class CTcpConnect;
+class CEpoller;
+
 class CUdpChannel
 {
 public:
@@ -14,22 +17,22 @@ public:
 	}ESTATE;
 
 	typedef enum {
-		DIRECT_IN = 0,
-		DIRECT_OUT = 1,
+		DIRECT_SRC = 0,
+		DIRECT_DST = 1,
 		DURECT_ERR = 2,
 	}EDIRECT;
 
 public:
-	CUdpChannel(uint32_t id, SOCKADDR_IN& localaddr, CTcpConnect* pIn, CTcpConnect* pOut);
+	CUdpChannel(uint32_t id, CEpoller* pReactor, CTcpConnect* pIn, CTcpConnect* pOut);
 	~CUdpChannel();
 	bool onInit();
 	bool onClose();
-	bool onIsClosed() { return _eState == ESTATE::STATE_CLOSED; }
- 	bool onShutdonw(uint8_t dire);
+	bool onIsClosed() { return _eState == STATE_CLOSED; }
+ 	bool onNotifySrcConnCloseChannel();
+ 	bool onNotifyDstConnCloseChannel();
  	SOCKADDR_IN onGetLocalAddr() { return _csSocket._localSockaddr;}
-
+ 	uint32_t onGetId() { return _uiId; }
 	bool onForward();
-	uint32_t onGetId() { return _uiId; }
 
 private:
 	bool readFrom();
@@ -40,8 +43,8 @@ private:
 
 public:
 	ESTATE		_eState;
-	bool 		_bOpenedIn;
-	bool 		_bOpenedOut;
+	bool 		_bSrcOpened;
+	bool 		_bDstOpened;
 
 	uint32_t	_uiId;
 	uint32_t	_uiReadBuffSize;
@@ -51,13 +54,14 @@ public:
 	char*		_szSendBuff;
 
 	CSocketData _csSocket;
-	SOCKADDR_IN	_inSockAddr;
-	SOCKADDR_IN	_outSockAddr;
-	CSTD_STR	_szInAddr;
-	CSTD_STR	_szOutAddr;
+	SOCKADDR_IN	_srcSockAddr;
+	SOCKADDR_IN	_dstSockAddr;
+	CSTD_STR	_szSrcAddr;
+	CSTD_STR	_szDstAddr;
 
-	CTcpConnect* _pInConn;
-	CTcpConnect* _pOutConn;
+	CEpoller*	 _pReactor;
+	CTcpConnect* _pSrcConn;
+	CTcpConnect* _pDstConn;
 };
 
 #endif

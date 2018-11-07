@@ -80,11 +80,6 @@ bool CAccepter::onStop()
 		_mapClients.erase(conn_it++);
 	}
 
-	std::map<uint32_t, CUdpChannel*>::iterator channel_it = _mapChannels.begin();
-	for (; channel_it != _mapChannels.end(); )
-	{
-		_mapChannels.erase(channel_it++);
-	}
 	DEBUGINFO("accepter %u stop.", _uiId);
 	return true;
 }
@@ -153,7 +148,6 @@ bool CAccepter::delTcpNetEvent(CNetEvent* pNet)
 		_setGuids.erase(setit);
 	}
 
-
 	std::map<uint32_t, CTcpConnect*>::iterator mapit = _mapClients.find(pConn->onGetId());
 	if (mapit != _mapClients.end())
 	{
@@ -161,32 +155,14 @@ bool CAccepter::delTcpNetEvent(CNetEvent* pNet)
 		_mapClients.erase(mapit);
 	}
 
-
-	DEBUGINFO("client disconnect. ID: %u | GUID: %s | IP: %s", pConn->onGetId(), pConn->onGetGuid().c_str(), pConn->onGetAddr().c_str());
+	DEBUGINFO("client disconnect. ID: %u | GUID: %s | IP: %s | CN: %u | AN: %u"
+			, pConn->onGetId(), pConn->onGetGuid().c_str(), pConn->onGetAddr().c_str(), --_uiConnNum, onGetActiveNum());
 
 	delete pConn;
 	pNet->_ptr = NULL;
 	delete pNet; pNet = NULL;
-	_uiConnNum--;
 
 	return true;
-}
-
-bool CAccepter::delUdpNetEvent(CNetEvent* pConn)
-{
-
-
-	return true;
-}
-
-bool CAccepter::onShutdownChannel(uint32_t id, char direct)
-{
-	std::map<uint32_t, CUdpChannel*>::iterator it = _mapChannels.find(id);
-	if (it != _mapChannels.end())
-	{
-		CUdpChannel* pChannel = it->second;
-		pChannel->onShutdonw(direct);
-	}
 }
 
 CTcpConnect* CAccepter::onGetClient(uint32_t clientid)
@@ -204,7 +180,7 @@ void CAccepter::InnerThreadProc()
 	int nready = _pReactor->wait(-1);
 	if (nready > 0)
 	{
-		DEBUGINFO("epoll wait fd num: %d", nready);
+		//DEBUGINFO("epoll wait fd num: %d", nready);
 		for (int i = 0; i < nready; i++)
 		{
 			struct epoll_event& ev = _pReactor->get(i);
@@ -248,20 +224,23 @@ bool CAccepter::onAcceptCallback(void* obj, struct epoll_event& ev)
 	CNetEvent* pNet = new CNetEvent(client, pConn, CAccepter::onTcpEventCallback);
 	pConn->onInit(pNet);
 
-	DEBUGINFO("client connected. FD: %d | IP: %s", client._nFd, pConn->onGetAddr().c_str());
-
 	if (!pThis->_pReactor->add(client._nFd, pNet))
 	{
-		CSocket::onClose(client);
-		DEBUGINFO("epoll add failed");
+		DEBUGINFO("epoll add event failed: FD: %d, IP: %s.", client._nFd, pConn->onGetAddr().c_str());
+
+		delete pConn;
+		delete pNet;
+		return false;
 	}
+
 	pThis->onIncrConnNum();
+	DEBUGINFO("client connected. FD: %d | IP: %s | CN: %u | AN: %u"
+			, client._nFd, pConn->onGetAddr().c_str(), pThis->onGetConnNum(), pThis->onGetActiveNum());
 	return true;
 }
 
 bool CAccepter::onTcpEventCallback(void* obj, struct epoll_event& ev)
 {
-	DEBUGINFO("ctrl sock data in...");
 	if (!obj)
 	{
 		DEBUGINFO("obj point is null.");
@@ -295,7 +274,6 @@ bool CAccepter::onTcpEventCallback(void* obj, struct epoll_event& ev)
 		}
 	}
 
-	DEBUGINFO("recv client %d function: %d", pNet->_csSocket._nFd, pConn->_stHeader.ucFunc);
 	switch (pConn->_stHeader.ucFunc)
 	{
 	case CFuncCode::FUNC_LOGIN: {
@@ -343,7 +321,6 @@ bool CAccepter::onUdpEventCallback(void* obj, struct epoll_event& ev)
 		DEBUGINFO("obj point is null.");
 		return false;
 	}
-	DEBUGINFO("[UDP] data in.");
 
 	if (NULL == ev.data.ptr)
 	{
@@ -388,8 +365,8 @@ bool CAccepter::onLogin(CNetEvent* pNet, CLoginReqPackage& pkg)
 		private_inaddr.s_addr = pkg.uiPrivateAddr;
 
 		gCCommon->onSockAddr2String(private_inaddr, priva_addr);
-		DEBUGINFO("[LOGIN] | ID: %u | IP: %s | VIP: %s | GUID: %32s | CONN NUM: %d"
-				, pConn->onGetId(), client_addr.c_str(), priva_addr.c_str(), pConn->onGetGuid().c_str(), _mapClients.size());
+		DEBUGINFO(" ID: %u | IP: %s | VIP: %s | GUID: %32s | CN: %u | AN: %u"
+				, pConn->onGetId(), client_addr.c_str(), priva_addr.c_str(), pConn->onGetGuid().c_str(), onGetConnNum(), onGetActiveNum());
 	}
 
 	if(!pConn->onResponseLogin())
@@ -402,9 +379,8 @@ bool CAccepter::onLogin(CNetEvent* pNet, CLoginReqPackage& pkg)
 
 bool CAccepter::onGetAllClientInfo(uint32_t id, std::vector<SGetConsolesRespPackage>& vecConsoles)
 {
-	for (std::map<uint32_t, CTcpConnect*>::iterator it = _mapClients.begin();
-			it != _mapClients.end();
-			++it)
+	std::map<uint32_t, CTcpConnect*>::iterator it = _mapClients.begin();
+	for (;it != _mapClients.end();++it)
 	{
 		if (it->first == id)
 			continue;
@@ -427,7 +403,7 @@ bool CAccepter::onGetConsoles(CNetEvent* pNet, CGetConsolesReqPackage& pkg)
 	}
 	else
 	{
-		DEBUGINFO("client %u no login cannot get consoles.", pConn->onGetId());
+		DEBUGINFO("client[%04u] no login cannot get consoles.", pConn->onGetId());
 		pConn->onSetErr(CErrorCode::ERROR_SOCKET5_AUTH_ERROR);
 	}
 
@@ -444,21 +420,22 @@ bool CAccepter::onAccelerate(CNetEvent* pNet, CAccelationReqPackage& pkg)
 	CTcpConnect* pInConn = (CTcpConnect*)pNet->_ptr;
 	CTcpConnect* pOutConn = onGetClient(pkg.uiDstId);
 
+	SOCKADDR_IN udp_addr;
+	bzero(&udp_addr, sizeof(SOCKADDR_IN));
 	if (NULL == pOutConn || !pInConn->onIsLogined() || pInConn == pOutConn)
 	{
 		pInConn->onSetErr(CErrorCode::ERROR_SYSTEM_BIND_ERROR);
-		DEBUGINFO("get outter client %u %s, in client %u  %s."
+		DEBUGINFO("get src client [%04u] %s, dst client [%04u] %s."
 				, pkg.uiDstId, pOutConn ? "ok": "failed", pInConn->onGetId(), pInConn->onIsLogined() ? "login": "no login");
 	}
 	else
 	{
-		pInConn->onCreateUdpChannel(pOutConn);
+		pInConn->onCreateUdpChannel(getChannelId(), pOutConn, udp_addr);
 	}
-
 
 	if(!pInConn->onResponseAccelate(udp_addr))
 	{
-		DEBUGINFO("response in client %u failed.", pInConn->onGetId());
+		DEBUGINFO("response in client [%04u] failed.", pInConn->onGetId());
 		return false;
 	}
 

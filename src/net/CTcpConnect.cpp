@@ -22,10 +22,8 @@ CTcpConnect::CTcpConnect(CAccepter* pAccepter, CEpoller* pReactor, CSocketData& 
 
 CTcpConnect::~CTcpConnect()
 {
-	DEBUGINFO("Delete CTcpConnect. ID: %u", onGetId());
+	DEBUGINFO("client [%04u] delete.", _uiId);
 	onDisconnectd();
-	_pNet = NULL;
-	_pReactor = NULL;
 }
 
 bool CTcpConnect::onInit(CNetEvent* pNet)
@@ -41,6 +39,8 @@ bool CTcpConnect::onInit(CNetEvent* pNet)
 
 bool CTcpConnect::onDisconnectd()
 {
+	DEBUGINFO("client[%04u] disconnected.", _uiId);
+
 	if (!_bConnect)
 		return false;
 
@@ -52,23 +52,113 @@ bool CTcpConnect::onDisconnectd()
 	}
 
 	CSocket::onClose(_csClientCtrl);
-	std::map<uint32_t, CUdpChannel*>::iterator mapit = _mapInChannels.begin();
-	for (; mapit != _mapInChannels.end(); ++mapit)
+	std::map<uint32_t, CUdpChannel*>::iterator it = _mapSrcChannels.begin();
+	for (; it != _mapSrcChannels.end();)
 	{
-		mapit->second->onShutdonw(0);
+		if (it->second)
+		{
+			it->second->onNotifyDstConnCloseChannel();
+			delete it->second;
+			_mapSrcChannels.erase(it++);
+		}
+		else
+			++it;
 	}
 
-	for (mapit = _mapOutChannels.begin(); mapit != _mapOutChannels.end(); ++mapit)
+	for (it = _mapDstChannels.begin(); it != _mapDstChannels.end();)
 	{
-		mapit->second->onShutdonw(1);
+		if (it->second)
+		{
+			it->second->onNotifySrcConnCloseChannel();
+			_mapDstChannels.erase(it++);
+		}
+		else
+			++it;
+	}
+
+	_pNet = NULL;
+	_pReactor = NULL;
+	_pAccepter = NULL;
+	return true;
+}
+
+
+bool CTcpConnect::onCreateUdpChannel(uint32_t id, CTcpConnect* pDstConn, SOCKADDR_IN& udp_addr)
+{
+	CUdpChannel* pChannel = new CUdpChannel(id, _pReactor, this, pDstConn);
+
+	if (pChannel->onInit())
+	{
+		udp_addr = pChannel->onGetLocalAddr();
+		if(pDstConn->onResponseAccess(udp_addr, onGetPrivateAddr()))
+		{
+			CNetEvent* pNewNet = new CNetEvent(pChannel->_csSocket, pChannel, CAccepter::onUdpEventCallback);
+			_pReactor->add(pChannel->_csSocket._nFd, pNewNet);
+
+			_mapSrcChannels.insert(std::make_pair(pChannel->onGetId(), pChannel));
+			pDstConn->onAddDstUdpChannel(pChannel);
+
+			onChangeState(CTcpConnect::STATE_ACCELERATING);
+			onSetErr(CErrorCode::ERROR_SOCKET5_SUCCESS);
+			return true;
+		}
+
+		onSetErr(CErrorCode::ERROR_SOCKET5_COONNECT_NEXE_ERROR);
+		DEBUGINFO("client[%04u] response dst client [%4u] access acceleration failed.", _uiId, pDstConn->onGetId());
+	}
+
+	if (CErrorCode::ERROR_SOCKET5_SUCCESS != onGetErr())
+	{
+		delete pChannel;
+		return false;
 	}
 
 	return true;
 }
 
-bool CTcpConnect::onChangeState(ESTATE state)
+bool CTcpConnect::onAddDstUdpChannel(CUdpChannel* pChannel)
 {
-	_eState = state;
+	std::map<uint32_t, CUdpChannel*>::iterator it = _mapDstChannels.find(pChannel->onGetId());
+	if (it != _mapDstChannels.end())
+	{
+		DEBUGINFO("client[%04u] repeate to add dst udp channel [%04u].", _uiId, pChannel->onGetId());
+		return false;
+	}
+	_mapDstChannels.insert(std::make_pair(pChannel->onGetId(), pChannel));
+	DEBUGINFO("client[%04u] add dst udp channel [%04u] ok.", _uiId, pChannel->onGetId());
+	return true;
+}
+
+bool CTcpConnect::onSrcChannelClose(uint32_t id)
+{
+	std::map<uint32_t, CUdpChannel*>::iterator it = _mapSrcChannels.find(id);
+	if (it == _mapSrcChannels.end())
+	{
+		DEBUGINFO("client[%04u] remove src udp channel[%04u] faild.", _uiId, id);
+		return false;
+	}
+	SOCKADDR_IN addr = it->second->onGetLocalAddr();
+	onResponseCloseUdp(addr);
+	// delete
+	delete it->second;
+	_mapSrcChannels.erase(it);
+
+	DEBUGINFO("client[%04u] remove src udp channel[%04u] ok.", _uiId, id);
+	return true;
+}
+bool CTcpConnect::onDstChannelClose(uint32_t id)
+{
+	std::map<uint32_t, CUdpChannel*>::iterator it = _mapDstChannels.find(id);
+	if (it == _mapDstChannels.end())
+	{
+		DEBUGINFO("client[%04u] remove dst udp channel[%04u] faild.", _uiId, id);
+		return false;
+	}
+	SOCKADDR_IN addr = it->second->onGetLocalAddr();
+	onResponseCloseUdp(addr);
+	_mapDstChannels.erase(it);
+
+	DEBUGINFO("client[%04u] remove dst udp channel[%04u] ok.", _uiId, id);
 	return true;
 }
 
@@ -124,18 +214,18 @@ bool CTcpConnect::onReadLine(uint8_t *szBuff,const uint32_t &uiBuffSize)
 bool CTcpConnect::onRead()
 {
 	int nRead = recv(_csClientCtrl._nFd, _csReadBuf._szCliBuf + _csReadBuf._uiCliBufSize, 8192, 0);
-	DEBUGINFO("client[%u] socket[%d] read %d bypes, buffer remain %d bypes.", _uiId, _csClientCtrl._nFd, nRead, _csReadBuf._uiCliBufSize);
+	DEBUGINFO("client[%04u] socket[%d] read %d bypes, buffer remain %d bypes.", _uiId, _csClientCtrl._nFd, nRead, _csReadBuf._uiCliBufSize);
 
 	if(nRead <= 0)
 	{
-		DEBUGINFO("recv from socket[%d] failed errno %d: %m", _csClientCtrl._nFd, errno);
-		if (EAGAIN == errno || EINTR == errno)
+		DEBUGINFO("client[%04u] recv from socket[%d] failed errno %d: %m", _uiId, _csClientCtrl._nFd, errno);
+		if (nRead < 0 && (EAGAIN == errno || EINTR == errno || EWOULDBLOCK == errno))
 		{
-			DEBUGINFO("client%u read again.", _uiId);
+			DEBUGINFO("client[%04u] read again.", _uiId);
 		}
-		else
+		else if (nRead == 0)
 		{
-			DEBUGINFO("client%u recv faield %m", _uiId);
+			DEBUGINFO("client[%04u] recv faield close socket. err: %m", _uiId);
 			onDisconnectd();
 		}
 		return false;
@@ -289,7 +379,7 @@ bool CTcpConnect::onSend(const char* buf, size_t len)
 		_pNet->_events |= EPOLLOUT;
 		_pReactor->mod(_csClientCtrl._nFd, _pNet->_events, _pNet);
 
-		DEBUGINFO("client%u send %d bytes failed: %m", _csClientCtrl._nFd, nSend);
+		DEBUGINFO("client[%04u] send %d bytes failed: %m", _uiId, nSend);
 		return false;
 	}
 	return true;
@@ -297,7 +387,7 @@ bool CTcpConnect::onSend(const char* buf, size_t len)
 
 void CTcpConnect::onDisplayHead()
 {
-	DEBUGINFO("[HEAD] 0x%X 0x%X | P:%u | V:%u | F:%u | K:%u | L:%u",
+	DEBUGINFO("client[%04u] [HEAD] 0x%02X%02X | P:%u | V:%u | F:%u | K:%u | L:%u", _uiId,
 			_stHeader.ucHead1, _stHeader.ucHead2, _stHeader.ucProtoVersion, _stHeader.ucSerVersion,
 			_stHeader.ucFunc, _stHeader.ucKeyIndex, _stHeader.usBodyLen);
 }
@@ -427,53 +517,18 @@ bool CTcpConnect::onResponseAccess(SOCKADDR_IN& localaddr, uint32_t private_addr
 	return true;
 }
 
-bool CTcpConnect::onCreateUdpChannel(CTcpConnect* pDstConn)
+bool CTcpConnect::onResponseCloseUdp(SOCKADDR_IN& addr)
 {
-	SOCKADDR_IN udp_addr;
-	bzero(&udp_addr, sizeof(SOCKADDR_IN));
-
-	CUdpChannel* pChannel = new CUdpChannel(getChannelId(), udp_addr
-			, _csClientCtrl._remoteSockAddr
-			, pDstConn->_csClientCtrl._remoteSockAddr);
-
-	if (pChannel->onInit())
-	{
-		udp_addr = pChannel->onGetLocalAddr();
-		if(pDstConn->onResponseAccess(udp_addr, onGetPrivateAddr()))
-		{
-			CNetEvent* pNewNet = new CNetEvent(pChannel->_csSocket, pChannel, CAccepter::onUdpEventCallback);
-			_pReactor->add(pChannel->_csSocket._nFd, pNewNet);
-
-			_mapInChannels.insert(std::make_pair(pChannel->onGetId(), pChannel));
-			pDstConn->onAddOutUdpChannel(pChannel);
-
-			onChangeState(CTcpConnect::STATE_ACCELERATING);
-			onSetErr(CErrorCode::ERROR_SOCKET5_SUCCESS);
-			return true;
-		}
-
-		onSetErr(CErrorCode::ERROR_SOCKET5_COONNECT_NEXE_ERROR);
-		DEBUGINFO("response out client %u access acceleration failed.", pDstConn->onGetId());
-	}
-
-	if (CErrorCode::ERROR_SOCKET5_SUCCESS != onGetErr())
-	{
-		delete pChannel;
+	CBuff cbuff;
+	if(!cbuff.onInit(16))
 		return false;
-	}
 
-	return true;
-}
-
-
-bool CTcpConnect::onAddOutUdpChannel(CUdpChannel* pChannel)
-{
-	std::map<uint32_t, CUdpChannel*>::iterator it = _mapOutChannels.find(pChannel->onGetId());
-	if (it != _mapOutChannels.end())
-	{
-		DEBUGINFO("repeate to add udp channel %u in tcp: %u.", pChannel->onGetId(), onGetId());
+	if(!cbuff.onWrite(addr.sin_addr.s_addr))
 		return false;
-	}
-	_mapOutChannels.insert(std::make_pair(pChannel->onGetId(), pChannel));
-	return true;
+
+	if(!cbuff.onWriteWithLength((char*)&addr.sin_port,2))
+		return false;
+
+	_stHeader.ucFunc = CFuncCode::FUNC_ACCELERATE_STOPPED;
+	onPackSock5Respon(cbuff);
 }

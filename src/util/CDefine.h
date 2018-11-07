@@ -2,7 +2,7 @@
 #define SRC_UTILITY_CDEFINE_H_
 #define	VERSION		"nat_proxy@root.copyright.2018.10.30"
 
-#define _DEBUG
+//#define _DEBUG
 #define MALLOC(size) malloc(size)
 #define FREE(data) if((data)){free((data));(data)=NULL;}
 #define DELETE(data) if((data)){delete((data));(data)=NULL;}
