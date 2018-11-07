@@ -61,21 +61,22 @@ bool CUdpChannel::onClose()
 		return false;
 
 	_eState = STATE_CLOSED;
-	CSocket::onClose(_csSocket);
-	FREE(_szReadBuff);
-	FREE(_szSendBuff);
-
 	if (_pReactor)
 	{
 		DEBUGINFO("[UDP] channel[%04u] remove from reactor.", _uiId);
 		int events = EPOLLIN | EPOLLOUT;
 		_pReactor->del(_csSocket._nFd, events);
-		_pReactor = NULL;
-		_pSrcConn = NULL;
-		_pDstConn = NULL;
 	}
 
+	CSocket::onClose(_csSocket);
+	FREE(_szReadBuff);
+	FREE(_szSendBuff);
+
 	DEBUGINFO("[UDP] channel[%04u] (%04u)[%s --> %s](%04u) closed.", _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), _szDstAddr.c_str(), _pDstConn->onGetId());
+	_pReactor = NULL;
+	_pSrcConn = NULL;
+	_pDstConn = NULL;
+
 	return true;
 }
 

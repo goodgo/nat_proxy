@@ -58,8 +58,10 @@ bool CTcpConnect::onDisconnectd()
 		if (it->second)
 		{
 			it->second->onNotifyDstConnCloseChannel();
+			uint32_t channel_id = it->second->onGetId();
 			delete it->second;
 			_mapSrcChannels.erase(it++);
+			DEBUGINFO("client[%04u] erase src channel[%04u]", _uiId, channel_id);
 		}
 		else
 			++it;
@@ -70,7 +72,9 @@ bool CTcpConnect::onDisconnectd()
 		if (it->second)
 		{
 			it->second->onNotifySrcConnCloseChannel();
+			uint32_t channel_id = it->second->onGetId();
 			_mapDstChannels.erase(it++);
+			DEBUGINFO("client[%04u] erase src channel[%04u]", _uiId, channel_id);
 		}
 		else
 			++it;
