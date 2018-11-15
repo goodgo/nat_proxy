@@ -22,7 +22,7 @@ CTcpConnect::CTcpConnect(CAccepter* pAccepter, CEpoller* pReactor, CSocketData& 
 
 CTcpConnect::~CTcpConnect()
 {
-	DEBUGINFO("client [%04u] delete.", _uiId);
+	DEBUGINFO("client [%04u] destructor.", _uiId);
 	onDisconnectd();
 }
 
@@ -39,8 +39,6 @@ bool CTcpConnect::onInit(CNetEvent* pNet)
 
 bool CTcpConnect::onDisconnectd()
 {
-	DEBUGINFO("client[%04u] disconnected.", _uiId);
-
 	if (!_bConnect)
 		return false;
 
@@ -57,11 +55,11 @@ bool CTcpConnect::onDisconnectd()
 	{
 		if (it->second)
 		{
-			it->second->onNotifyDstConnCloseChannel();
 			uint32_t channel_id = it->second->onGetId();
+			it->second->onNotifyDstConnCloseChannel();
 			delete it->second;
 			_mapSrcChannels.erase(it++);
-			DEBUGINFO("client[%04u] erase src channel[%04u]", _uiId, channel_id);
+			DEBUGINFO("source client[%04u] erase channel[%04u].", _uiId, channel_id);
 		}
 		else
 			++it;
@@ -71,10 +69,11 @@ bool CTcpConnect::onDisconnectd()
 	{
 		if (it->second)
 		{
-			it->second->onNotifySrcConnCloseChannel();
 			uint32_t channel_id = it->second->onGetId();
+			it->second->onNotifySrcConnCloseChannel();
+			delete it->second;
 			_mapDstChannels.erase(it++);
-			DEBUGINFO("client[%04u] erase src channel[%04u]", _uiId, channel_id);
+			DEBUGINFO("destination client[%04u] erase channel[%04u].", _uiId, channel_id);
 		}
 		else
 			++it;
@@ -108,7 +107,7 @@ bool CTcpConnect::onCreateUdpChannel(uint32_t id, CTcpConnect* pDstConn, SOCKADD
 		}
 
 		onSetErr(CErrorCode::ERROR_SOCKET5_COONNECT_NEXE_ERROR);
-		DEBUGINFO("client[%04u] response dst client [%4u] access acceleration failed.", _uiId, pDstConn->onGetId());
+		DEBUGINFO("client[%04u] response destination client[%4u] access acceleration failed.", _uiId, pDstConn->onGetId());
 	}
 
 	if (CErrorCode::ERROR_SOCKET5_SUCCESS != onGetErr())
@@ -125,11 +124,11 @@ bool CTcpConnect::onAddDstUdpChannel(CUdpChannel* pChannel)
 	std::map<uint32_t, CUdpChannel*>::iterator it = _mapDstChannels.find(pChannel->onGetId());
 	if (it != _mapDstChannels.end())
 	{
-		DEBUGINFO("client[%04u] repeate to add dst udp channel [%04u].", _uiId, pChannel->onGetId());
+		DEBUGINFO("client[%04u] repeate to add destination udp channel [%04u].", _uiId, pChannel->onGetId());
 		return false;
 	}
 	_mapDstChannels.insert(std::make_pair(pChannel->onGetId(), pChannel));
-	DEBUGINFO("client[%04u] add dst udp channel [%04u] ok.", _uiId, pChannel->onGetId());
+	DEBUGINFO("client[%04u] add destination udp channel[%04u] ok.", _uiId, pChannel->onGetId());
 	return true;
 }
 
@@ -138,16 +137,14 @@ bool CTcpConnect::onSrcChannelClose(uint32_t id)
 	std::map<uint32_t, CUdpChannel*>::iterator it = _mapSrcChannels.find(id);
 	if (it == _mapSrcChannels.end())
 	{
-		DEBUGINFO("client[%04u] remove src udp channel[%04u] faild.", _uiId, id);
+		DEBUGINFO("client[%04u] remove source udp channel[%04u] faild.", _uiId, id);
 		return false;
 	}
 	SOCKADDR_IN addr = it->second->onGetLocalAddr();
 	onResponseCloseUdp(addr);
-	// delete
-	delete it->second;
 	_mapSrcChannels.erase(it);
 
-	DEBUGINFO("client[%04u] remove src udp channel[%04u] ok.", _uiId, id);
+	DEBUGINFO("client[%04u] remove source udp channel[%04u] ok.", _uiId, id);
 	return true;
 }
 bool CTcpConnect::onDstChannelClose(uint32_t id)
@@ -155,14 +152,14 @@ bool CTcpConnect::onDstChannelClose(uint32_t id)
 	std::map<uint32_t, CUdpChannel*>::iterator it = _mapDstChannels.find(id);
 	if (it == _mapDstChannels.end())
 	{
-		DEBUGINFO("client[%04u] remove dst udp channel[%04u] faild.", _uiId, id);
+		DEBUGINFO("client[%04u] remove destination udp channel[%04u] faild.", _uiId, id);
 		return false;
 	}
 	SOCKADDR_IN addr = it->second->onGetLocalAddr();
 	onResponseCloseUdp(addr);
 	_mapDstChannels.erase(it);
 
-	DEBUGINFO("client[%04u] remove dst udp channel[%04u] ok.", _uiId, id);
+	DEBUGINFO("client[%04u] remove destination udp channel[%04u] ok.", _uiId, id);
 	return true;
 }
 

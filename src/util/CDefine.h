@@ -1,6 +1,6 @@
 #ifndef SRC_UTILITY_CDEFINE_H_
 #define SRC_UTILITY_CDEFINE_H_
-#define	VERSION		"nat_proxy@root.copyright.2018.10.30"
+#define	VERSION		"nat_proxy@root.copyright.2018.11.12"
 
 //#define _DEBUG
 #define MALLOC(size) malloc(size)

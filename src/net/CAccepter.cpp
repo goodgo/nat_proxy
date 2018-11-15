@@ -144,14 +144,12 @@ bool CAccepter::delTcpNetEvent(CNetEvent* pNet)
 	std::set<CSTD_STR>::iterator setit = _setGuids.find(pConn->onGetGuid());
 	if (setit != _setGuids.end())
 	{
-		DEBUGINFO("erase guid: %s", setit->c_str());
 		_setGuids.erase(setit);
 	}
 
 	std::map<uint32_t, CTcpConnect*>::iterator mapit = _mapClients.find(pConn->onGetId());
 	if (mapit != _mapClients.end())
 	{
-		DEBUGINFO("erase cient: %u", mapit->first);
 		_mapClients.erase(mapit);
 	}
 
@@ -160,7 +158,9 @@ bool CAccepter::delTcpNetEvent(CNetEvent* pNet)
 
 	delete pConn;
 	pNet->_ptr = NULL;
-	delete pNet; pNet = NULL;
+
+	delete pNet;
+	pNet = NULL;
 
 	return true;
 }
@@ -253,11 +253,8 @@ bool CAccepter::onTcpEventCallback(void* obj, struct epoll_event& ev)
 
 	if (!pConn->onReadHeader())
 	{
-		if (!pConn->onIsConnected())
-		{
-			pThis->delTcpNetEvent(pNet);
-			return false;
-		}
+		pThis->delTcpNetEvent(pNet);
+		return false;
 	}
 
 	pConn->onDisplayHead();
@@ -417,25 +414,25 @@ bool CAccepter::onGetConsoles(CNetEvent* pNet, CGetConsolesReqPackage& pkg)
 
 bool CAccepter::onAccelerate(CNetEvent* pNet, CAccelationReqPackage& pkg)
 {
-	CTcpConnect* pInConn = (CTcpConnect*)pNet->_ptr;
-	CTcpConnect* pOutConn = onGetClient(pkg.uiDstId);
+	CTcpConnect* pSrcConn = (CTcpConnect*)pNet->_ptr;
+	CTcpConnect* pDstConn = onGetClient(pkg.uiDstId);
 
 	SOCKADDR_IN udp_addr;
 	bzero(&udp_addr, sizeof(SOCKADDR_IN));
-	if (NULL == pOutConn || !pInConn->onIsLogined() || pInConn == pOutConn)
+	if (NULL == pDstConn || !pSrcConn->onIsLogined() || pSrcConn == pDstConn)
 	{
-		pInConn->onSetErr(CErrorCode::ERROR_SYSTEM_BIND_ERROR);
-		DEBUGINFO("get src client [%04u] %s, dst client [%04u] %s."
-				, pkg.uiDstId, pOutConn ? "ok": "failed", pInConn->onGetId(), pInConn->onIsLogined() ? "login": "no login");
+		pSrcConn->onSetErr(CErrorCode::ERROR_SYSTEM_BIND_ERROR);
+		DEBUGINFO("source client[%04u] %s login, get destination client[%04u] %s.",
+				pSrcConn->onGetId(), pSrcConn->onIsLogined() ? "has": "no", pkg.uiDstId, pDstConn ? "ok": "failed");
 	}
 	else
 	{
-		pInConn->onCreateUdpChannel(getChannelId(), pOutConn, udp_addr);
+		pSrcConn->onCreateUdpChannel(getChannelId(), pDstConn, udp_addr);
 	}
 
-	if(!pInConn->onResponseAccelate(udp_addr))
+	if(!pSrcConn->onResponseAccelate(udp_addr))
 	{
-		DEBUGINFO("response in client [%04u] failed.", pInConn->onGetId());
+		DEBUGINFO("response in client [%04u] failed.", pSrcConn->onGetId());
 		return false;
 	}
 

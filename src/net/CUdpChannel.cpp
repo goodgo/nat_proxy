@@ -50,13 +50,12 @@ bool CUdpChannel::onInit()
 		return false;
 	}
 
-	DEBUGINFO("[UDP] channel[%04u] (%04u)[%s --> %s](%04u) initialize", _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), _szDstAddr.c_str(), _pDstConn->onGetId());
+	DEBUGINFO("[UDP] initialize channel[%04u] (%04u)[%s --> %s](%04u).", _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), _szDstAddr.c_str(), _pDstConn->onGetId());
 	return true;
 }
 
 bool CUdpChannel::onClose()
 {
-	DEBUGINFO("[UDP] channel[%04u] close state: %u", _uiId, _eState);
 	if (STATE_CLOSED == _eState)
 		return false;
 
@@ -72,7 +71,7 @@ bool CUdpChannel::onClose()
 	FREE(_szReadBuff);
 	FREE(_szSendBuff);
 
-	DEBUGINFO("[UDP] channel[%04u] (%04u)[%s --> %s](%04u) closed.", _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), _szDstAddr.c_str(), _pDstConn->onGetId());
+	DEBUGINFO("[UDP] close channel[%04u] (%04u)[%s --> %s](%04u).", _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), _szDstAddr.c_str(), _pDstConn->onGetId());
 	_pReactor = NULL;
 	_pSrcConn = NULL;
 	_pDstConn = NULL;
@@ -84,14 +83,14 @@ bool CUdpChannel::onClose()
 bool CUdpChannel::onNotifySrcConnCloseChannel()
 {
 	_bSrcOpened = false;
-	DEBUGINFO("[UDP] channel[%04u] notify src client[%04u] to close channel.", _uiId, _pSrcConn->onGetId());
+	DEBUGINFO("[UDP] channel[%04u] notify source client[%04u] to close source udp point.", _uiId, _pSrcConn->onGetId());
 	return _pSrcConn->onSrcChannelClose(onGetId());
 }
 
 bool CUdpChannel::onNotifyDstConnCloseChannel()
 {
 	_bDstOpened = false;
-	DEBUGINFO("[UDP] channel[%04u] notify dst client[%04u] to close channel.", _uiId, _pDstConn->onGetId());
+	DEBUGINFO("[UDP] channel[%04u] notify destination client[%04u] to close destination udp point.", _uiId, _pDstConn->onGetId());
 	return _pDstConn->onDstChannelClose(onGetId());
 }
 
@@ -137,7 +136,7 @@ bool CUdpChannel::forward()
 		CSTD_STR szLocal;
 		gCCommon->onSockAddr2String(_csSocket._localSockaddr,szLocal);
 		DEBUGINFO("[UDP] channel[%04u] (%04u)[%s --> %u --> %s](%04u)"
-				, _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), _csSocket._localSockaddr.sin_port, _szDstAddr.c_str(), _pDstConn->onGetId());
+				, _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), ntohs(_csSocket._localSockaddr.sin_port), _szDstAddr.c_str(), _pDstConn->onGetId());
 
 		uint8_t byte1 = _szReadBuff[0];
 		uint8_t byte2 = _szReadBuff[1];
@@ -152,7 +151,7 @@ bool CUdpChannel::forward()
 		gCCommon->onSockAddr2String(_csSocket._localSockaddr,szLocal);
 
 		DEBUGINFO("[UDP] channel[%04u] (%04u)[%s <-- %u <-- %s](%04u) "
-				, _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), _csSocket._localSockaddr.sin_port, _szDstAddr.c_str(), _pDstConn->onGetId());
+				, _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), ntohs(_csSocket._localSockaddr.sin_port), _szDstAddr.c_str(), _pDstConn->onGetId());
 
 		uint8_t byte1 = _szReadBuff[0];
 		uint8_t byte2 = _szReadBuff[1];
@@ -165,9 +164,7 @@ bool CUdpChannel::forward()
 	{
 		CSTD_STR szRemote, szSrc, szDst;
 		gCCommon->onSockAddr2String(_csSocket._remoteSockAddr, szRemote);
-		gCCommon->onSockAddr2String(_srcSockAddr, szSrc);
-		gCCommon->onSockAddr2String(_dstSockAddr, szDst);
-		DEBUGINFO("[UDP] channel[%04u] remote addr invalid: %s NOT IN: [%s, %s]", _uiId, szRemote.c_str(), szSrc.c_str(), szDst.c_str());
+		DEBUGINFO("[UDP] channel[%04u] remote addr invalid: %s NOT IN: [%s, %s]", _uiId, szRemote.c_str(), _szSrcAddr.c_str(), _szDstAddr.c_str());
 		return false;
 	}
 }
@@ -179,26 +176,27 @@ bool CUdpChannel::echo()
 		case DIRECT_SRC: {
 			if (_bSrcOpened)
 			{
-				DEBUGINFO("[UDP] channel[%04u] have received src end auth data.", _uiId);
+				DEBUGINFO("[UDP] channel[%04u] have received source point auth data.", _uiId);
 				return false;
 			}
+
+			_srcSockAddr = _csSocket._remoteSockAddr;
+			gCCommon->onSockAddr2String(_srcSockAddr, _szSrcAddr);
 
 			if (_bDstOpened)
 			{
 				_bSrcOpened = true;
-				_srcSockAddr = _csSocket._remoteSockAddr;
 				_eState = STATE_FULLOPENED;
-
-				gCCommon->onSockAddr2String(_srcSockAddr,_szSrcAddr);
-				DEBUGINFO("[UDP] channel[%04u] (%04u)[%s ==> %s](%04u) established."
-						, _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(),_szDstAddr.c_str(), _pDstConn->onGetId());
+				DEBUGINFO("[UDP] established channel[%04u] (%04u)[%s => %u => %s](%04u)."
+						, _uiId, _pSrcConn->onGetId(), _szSrcAddr.c_str(), ntohs(_csSocket._localSockaddr.sin_port), _szDstAddr.c_str(), _pDstConn->onGetId());
 			}
 			else
 			{
-				DEBUGINFO("[UDP] channel[%04u] receive in end auth data but no receive out end auth data.", _uiId);
+				DEBUGINFO("[UDP] channel[%04u] receive source point auth data but no receive destination point data.", _uiId);
 				bzero(_szReadBuff, _uiReadBuffSize);
 			}
 
+			DEBUGINFO("[UDP] channel[%04u] echo source point: %s.", _uiId, _szSrcAddr.c_str());
 			if (!sendTo(_csSocket._remoteSockAddr))
 				return false;
 		}
@@ -206,25 +204,24 @@ bool CUdpChannel::echo()
 		case DIRECT_DST: {
 			if (_bDstOpened)
 			{
-				DEBUGINFO("[UDP] channel[%04u] repeat to receive out end auth data.", _uiId, _szDstAddr.c_str());
+				DEBUGINFO("[UDP] channel[%04u] repeat to receive destination point auth data.", _uiId, _szDstAddr.c_str());
 				return false;
 			}
 
 			_bDstOpened = true;
-
 			_dstSockAddr = _csSocket._remoteSockAddr;
 			gCCommon->onSockAddr2String(_dstSockAddr,_szDstAddr);
 
+			DEBUGINFO("[UDP] channel[%04u] echo destination point: %s.", _uiId, _szDstAddr.c_str());
 			if (!sendTo(_csSocket._remoteSockAddr))
 				return false;
 		}
 		break;
 		case DURECT_ERR: {
-			DEBUGINFO("[UDP] channel[%04u] parse auth data failed.", _uiId);
 			CSTD_STR szRemote;
 			gCCommon->onSockAddr2String(_csSocket._remoteSockAddr, szRemote);
-			DEBUGINFO("[UDP] get remote udp addr invalid: %s NOT IN: [%s, %s]"
-					, szRemote.c_str(), _szSrcAddr.c_str(), _szDstAddr.c_str());
+			DEBUGINFO("[UDP] channel[%04u] parse auth data failed, get remote udp addr invalid: %s NOT IN: [%s, %s]"
+					,_uiId, szRemote.c_str(), _szSrcAddr.c_str(), _szDstAddr.c_str());
 			return false;
 		}
 	}
