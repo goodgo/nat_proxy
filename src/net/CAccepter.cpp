@@ -12,7 +12,7 @@ CAccepter::CAccepter(int id)
 , _uiId(id)
 , _usPort(0)
 , _uiClientId(0)
-, _uiChannelId(0)
+, _uiChannelId(1000)
 , _uiConnNum(0)
 , _pReactor(NULL)
 {
