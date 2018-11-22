@@ -105,7 +105,7 @@ bool CUdpChannel::onForward()
 	switch (_eState)
 	{
 		case STATE_FULLOPENED: {
-			if (_uiReadSize < 28)
+			if (_uiReadSize == 1)
 				break;
 
 			return forward();
